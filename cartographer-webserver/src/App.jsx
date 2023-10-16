@@ -71,8 +71,7 @@ function App() {
 
               for (let k = 0; k < y_data.size(); k++) {
                 let z_data = y_data.get(k)
-
-                buffer.set(z_data, [i,j,k])
+                buffer.set(z_data, i,j,k)
               }
               }
             }
@@ -114,7 +113,14 @@ function App() {
           })
         }
 
-        
+        let sliced_pred_map = predicted_map.slice([0,0,0], [32*prediction_data.na, 32*prediction_data.nb, 32*prediction_data.nc])
+        let sliced_count_map = count_map.slice([0,0,0], [32*prediction_data.na, 32*prediction_data.nb, 32*prediction_data.nc])
+
+        let final_map = sliced_pred_map.div(sliced_count_map)
+
+        // NOW NEED TO SEND THIS BACK TO C++ TO GET MADE INTO A MAP WHICH CAN BE WRITTEN AND READ BY MOORHEN!
+
+
       })
     })
   }
