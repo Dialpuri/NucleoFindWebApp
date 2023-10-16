@@ -12,6 +12,10 @@
 struct CartographerPrePredictionData { 
     std::vector<std::vector<std::vector<float>>> interpolated_grid;
     std::vector<std::vector<int>> translation_list; 
+    float na;
+    float nb; 
+    float nc; 
+    int num_x, num_y, num_z;
 };
 
 class CartographerBackend { 
@@ -31,8 +35,6 @@ class CartographerBackend {
         }
 
         gemmi::Box<gemmi::Position> get_bounding_box() { 
-            std::cout << "Generating Bounding Box" << std::endl;
-
             gemmi::Box<gemmi::Fractional> extent = gemmi::find_asu_brick(grid.spacegroup).get_extent();
             extent.maximum = gemmi::Fractional({1,1,1});
             extent.minimum = gemmi::Fractional({0,0,0});
@@ -78,14 +80,12 @@ class CartographerBackend {
         }
 
         void interpolate_grid(float grid_spacing = 0.7) { 
-            std::cout << "Interpolating Grid" << std::endl;
-
             gemmi::Box<gemmi::Position> box = get_bounding_box();
             gemmi::Position size = box.get_size();
 
-            int num_x = round(size.x / grid_spacing);
-            int num_y = round(size.y / grid_spacing);
-            int num_z = round(size.z / grid_spacing);
+            num_x = round(size.x / grid_spacing);
+            num_y = round(size.y / grid_spacing);
+            num_z = round(size.z / grid_spacing);
 
             gemmi::Mat33 scale = {
                 grid_spacing, 0, 0,
@@ -98,8 +98,8 @@ class CartographerBackend {
             std::vector<std::vector<std::vector<float>>> array(num_x, std::vector<std::vector<float>>(num_y, std::vector<float>(num_z, 0.0)));
 
             for (int i = 0; i < array.size(); ++i) {
-                for (int j = 0; j < array[i].size(); ++j) {
-                    for (int k = 0; k < array[j][k].size(); ++k) {
+                for (int j = 0; j < array[0].size(); ++j) {
+                    for (int k = 0; k < array[0][0].size(); ++k) {
                         gemmi::Position pos(tr.apply(gemmi::Vec3(i, j, k)));
                         gemmi::Fractional fpos = grid.unit_cell.fractionalize(pos);
                         array[i][j][k] = grid.interpolate(fpos, 2);
@@ -108,14 +108,11 @@ class CartographerBackend {
             }
 
             interpolated_grid = array; 
-            std::cout << "Grid interpolation complete" << std::endl;
 
         }
 
 
         void calculate_translation(int overlap = 32) { 
-            std::cout << "Calculating Translation" << std::endl;
-
             float overlap_na = ceil(interpolated_grid.size() / overlap);
             float overlap_nb = ceil(interpolated_grid[0].size() / overlap);
             float overlap_nc = ceil(interpolated_grid[0][0].size() / overlap);
@@ -135,14 +132,19 @@ class CartographerBackend {
         }
 
         CartographerPrePredictionData generate_prediction_list() {
-            std::cout << "Generating Prediction List" << std::endl;
             load_mtz_file();
             interpolate_grid();
-            calculate_translation();
+            calculate_translation(); 
 
             CartographerPrePredictionData data; 
             data.interpolated_grid = interpolated_grid; 
             data.translation_list = translation_list;
+            data.na = na;
+            data.nb = nb; 
+            data.nc = nc; 
+            data.num_x = num_x;
+            data.num_y = num_y; 
+            data.num_z = num_z; 
 
             return data;
         }
@@ -157,7 +159,12 @@ class CartographerBackend {
         gemmi::Grid<float> grid; 
         std::vector<std::vector<std::vector<float>>> interpolated_grid; 
         std::vector<std::vector<int>> translation_list; 
-        float na, nb, nc; 
+        float na;
+        float nb;
+        float nc; 
+        int num_x; 
+        int num_y; 
+        int num_z; 
 
 };
 
@@ -185,12 +192,20 @@ EMSCRIPTEN_BINDINGS(cartographer_module) {
     // function("load_mtz_file", &load_mtz_file);
     register_vector<int>("VectorOfInts");
     register_vector<std::vector<int>>("VectorVectorOfInts");
-    register_vector<std::vector<std::vector<float>>>("vector<vector<vector<float>>>");
+
+    register_vector<float>("VectorOfFloats");
+    register_vector<std::vector<float>>("VectorVectorOfFloats");
+    register_vector<std::vector<std::vector<float>>>("VectorVectorVectorOfFloats");
 
     value_object<CartographerPrePredictionData>("CargorapherPrePredictionData")
         .field("interpolated_grid", &CartographerPrePredictionData::interpolated_grid)
-        .field("translation_list", &CartographerPrePredictionData::translation_list);
-
+        .field("translation_list", &CartographerPrePredictionData::translation_list)
+        .field("na", &CartographerPrePredictionData::na)
+        .field("nb", &CartographerPrePredictionData::nb)
+        .field("nc", &CartographerPrePredictionData::nc)
+        .field("num_x", &CartographerPrePredictionData::num_x)
+        .field("num_y", &CartographerPrePredictionData::num_y)
+        .field("num_z", &CartographerPrePredictionData::num_z);
 
     class_<CartographerBackend>("CartographerBackend")
         .constructor<const std::string&, const std::string&, const std::string&>()
