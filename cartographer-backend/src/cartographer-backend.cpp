@@ -5,6 +5,7 @@
 #include "gemmi/fourier.hpp"
 #include "gemmi/ccp4.hpp"     
 #include "gemmi/asumask.hpp"     
+#include "gemmi/model.hpp"
 
 #include <iostream>
 #include <algorithm>
@@ -32,6 +33,7 @@ class CartographerBackend {
             gemmi::FPhiProxy<gemmi::MtzDataProxy> fphi (gemmi::MtzDataProxy{mtz}, f.idx, phi.idx);
 
             grid = gemmi::transform_f_phi_to_map2<float>(fphi, {0,0,0}, 0.0, {0,0,0});
+            grid.normalize();
         }
 
         gemmi::Box<gemmi::Position> get_bounding_box() { 
@@ -73,7 +75,6 @@ class CartographerBackend {
             auto max_y = (*std::max_element(y_corners.begin(), y_corners.end()));
             auto max_z = (*std::max_element(z_corners.begin(), z_corners.end()));
 
-            gemmi::Box<gemmi::Position> box; 
             box.maximum = gemmi::Position(gemmi::Vec3(max_x, max_y, max_z));
             box.minimum =  gemmi::Position(gemmi::Vec3(min_x, min_y, min_z));
             return box;
@@ -107,7 +108,8 @@ class CartographerBackend {
                 }
             }
 
-            interpolated_grid = array; 
+            interpolated_grid = array;
+            std::cout << "Interpolated grid size " << interpolated_grid.size() << " " << interpolated_grid[0].size() << " " << interpolated_grid[0][0].size() << std::endl; 
 
         }
 
@@ -126,9 +128,9 @@ class CartographerBackend {
                 }
             }
 
-            na = ceil(interpolated_grid.size() / 32);
-            nb = ceil(interpolated_grid[0].size() / 32);
-            nc = ceil(interpolated_grid[0][0].size() / 32);
+            na = floor(interpolated_grid.size() / 32) + 1 ;
+            nb = floor(interpolated_grid[0].size() / 32) + 1;
+            nc = floor(interpolated_grid[0][0].size() / 32) + 1;
         }
 
         CartographerPrePredictionData generate_prediction_list() {
@@ -149,6 +151,74 @@ class CartographerBackend {
             return data;
         }
 
+        void reinterpret_to_output(std::vector<std::vector<std::vector<float>>>& array) { 
+            std::cout << "Reinterpreting to output" << std::endl;
+            std::cout << na << " " << nb << " " << nc << std::endl;
+            gemmi::Structure s;
+            s.cell = grid.unit_cell;
+            s.spacegroup_hm = grid.spacegroup->hm;
+
+            std::cout << "Input Array Shape " << array.size() << ", " << array[0].size() << ", " << array[0][0].size() << std::endl; 
+
+            std::cout << "Input Grid Unit Cell " << grid.unit_cell.a << ", " << grid.unit_cell.b << ", " << grid.unit_cell.c << std::endl; 
+
+
+            gemmi::Grid<float> output_grid;
+            output_grid.spacegroup = grid.spacegroup;
+            output_grid.set_unit_cell(grid.unit_cell);
+            output_grid.set_size_from_spacing(0.7, gemmi::GridSizeRounding::Nearest);
+
+            std::cout << "Output Grid Unit Cell " << output_grid.unit_cell.a << ", " << output_grid.unit_cell.b << ", " << output_grid.unit_cell.c << std::endl; 
+            std::cout << "Output Grid N " << output_grid.nu << ", " << output_grid.nv << ", " << output_grid.nw << std::endl; 
+
+
+            float size_x = 0.7 * array.size();
+            float size_y = 0.7 * array[0].size();
+            float size_z = 0.7 * array[0][0].size();
+
+            gemmi::UnitCell array_cell(size_x, size_y, size_z, 90, 90, 90);
+
+            std::cout << "Array Cell Unit Cell " << array_cell.a << ", " << array_cell.b << ", " << array_cell.c << std::endl; 
+
+            gemmi::Grid array_grid;
+            array_grid.set_size(array.size(), array[0].size(), array[0][0].size());
+            array_grid.unit_cell = array_cell;
+
+
+            for (int i = 0; i < array.size(); i++) {
+                for (int j = 0; j < array[0].size(); j++) {
+                    for (int k = 0; k < array[0][0].size(); k++) {
+                        array_grid.data[grid.index_s(i,j,k)] = array[i][j][k];
+                    }
+                }
+            }
+
+            
+            // array_grid.unit_cell = grid.unit_cell;
+            // array_grid.spacegroup = grid.spacegroup;
+
+            std::cout << "Beginning masked asu interpolation" << std::endl;
+
+
+            auto masked_asu = gemmi::masked_asu(output_grid);
+
+            for (auto it = masked_asu.begin(); it != masked_asu.end(); ++it) {
+                gemmi::Position position = output_grid.point_to_position(*it) - box.minimum;
+                *(*it).value = array_grid.interpolate_value(position);
+            }
+
+            output_grid.symmetrize_max();
+
+            gemmi::Ccp4<float> map; 
+            // map.grid = *(masked_asu.grid); 
+            map.grid = output_grid;
+
+            map.update_ccp4_header();
+            map.write_ccp4_map("/predicted.map");
+            std::cout << "Written CCP4 Map" << std::endl;
+
+        }
+
 
 
     private:
@@ -156,7 +226,9 @@ class CartographerBackend {
         std::string f_label;
         std::string phi_label;
 
+        gemmi::Box<gemmi::Position> box; 
         gemmi::Grid<float> grid; 
+
         std::vector<std::vector<std::vector<float>>> interpolated_grid; 
         std::vector<std::vector<int>> translation_list; 
         float na;
@@ -168,22 +240,6 @@ class CartographerBackend {
 
 };
 
-// extern "C" void load_mtz_file(const std::string& path) { 
-//     gemmi::Mtz mtz = gemmi::read_mtz_file(path);
-
-//     const gemmi::Mtz::Column& f = mtz.get_column_with_label("FWT");
-//     const gemmi::Mtz::Column& phi = mtz.get_column_with_label("PHWT");
-
-//     gemmi::FPhiProxy<gemmi::MtzDataProxy> fphi (gemmi::MtzDataProxy{mtz}, f.idx, phi.idx);
-
-//     gemmi::Grid<float> grid = gemmi::transform_f_phi_to_map2<float>(
-//         fphi, {0,0,0}, 0.0, {0,0,0}
-//     );
-
-//     std::cout << "Calculated grid = " << grid.nu << " " << grid.nv << " " << grid.nw << std::endl;
-
-
-// }
 
 
 using namespace emscripten;
@@ -209,6 +265,7 @@ EMSCRIPTEN_BINDINGS(cartographer_module) {
 
     class_<CartographerBackend>("CartographerBackend")
         .constructor<const std::string&, const std::string&, const std::string&>()
-        .function("generate_prediction_data", &CartographerBackend::generate_prediction_list);
+        .function("generate_prediction_data", &CartographerBackend::generate_prediction_list)
+        .function("reinterpret_to_output", &CartographerBackend::reinterpret_to_output);
 
 }

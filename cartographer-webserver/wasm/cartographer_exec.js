@@ -7239,7 +7239,7 @@ function dbg(text) {
   });
   FS.FSNode = FSNode;
   FS.createPreloadedFile = FS_createPreloadedFile;
-  FS.staticInit();Module["FS_createPath"] = FS.createPath;Module["FS_createDataFile"] = FS.createDataFile;Module["FS_createPreloadedFile"] = FS.createPreloadedFile;Module["FS_unlink"] = FS.unlink;Module["FS_createLazyFile"] = FS.createLazyFile;Module["FS_createDevice"] = FS.createDevice;;
+  FS.staticInit();Module["FS_readFile"] = FS.readFile;Module["FS_createPath"] = FS.createPath;Module["FS_createDataFile"] = FS.createDataFile;Module["FS_createPreloadedFile"] = FS.createPreloadedFile;Module["FS_unlink"] = FS.unlink;Module["FS_createLazyFile"] = FS.createLazyFile;Module["FS_createDevice"] = FS.createDevice;;
 if (ENVIRONMENT_IS_NODE) { NODEFS.staticInit(); };
 ERRNO_CODES = {
       'EPERM': 63,
@@ -7472,6 +7472,8 @@ var wasmImports = {
   /** @export */
   invoke_iiiii: invoke_iiiii,
   /** @export */
+  invoke_iiiiid: invoke_iiiiid,
+  /** @export */
   invoke_iiiiii: invoke_iiiiii,
   /** @export */
   invoke_iiiiiii: invoke_iiiiiii,
@@ -7626,6 +7628,17 @@ function invoke_viiii(index,a1,a2,a3,a4) {
 }
 
 function invoke_iiiiii(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3,a4,a5);
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiiid(index,a1,a2,a3,a4,a5) {
   var sp = stackSave();
   try {
     return getWasmTableEntry(index)(a1,a2,a3,a4,a5);
@@ -7814,6 +7827,7 @@ Module['removeRunDependency'] = removeRunDependency;
 Module['FS_createPath'] = FS.createPath;
 Module['FS_createLazyFile'] = FS.createLazyFile;
 Module['FS_createDevice'] = FS.createDevice;
+Module['FS_readFile'] = FS.readFile;
 Module['FS_createPreloadedFile'] = FS.createPreloadedFile;
 Module['FS'] = FS;
 Module['FS_createDataFile'] = FS.createDataFile;
@@ -7986,7 +8000,6 @@ var unexportedSymbols = [
   'addOnPostRun',
   'FS_createFolder',
   'FS_createLink',
-  'FS_readFile',
   'out',
   'err',
   'callMain',

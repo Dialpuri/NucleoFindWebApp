@@ -6,7 +6,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Vite + React</title>
     <script src="https://cdn.jsdelivr.net/pyodide/dev/full/pyodide.js"></script>
+    <script>
+      // See https://github.com/facebook/react/issues/20829#issuecomment-802088260
+      // FOR VITE FIX https://github.com/chaosprint/vite-plugin-cross-origin-isolation
+      if (!crossOriginIsolated) SharedArrayBuffer = ArrayBuffer;
 
+      window.onload = () => {
+          createCCP4Module({
+              print(t) {
+                  console.log(["output", t])
+              },
+              printErr(t) {
+                  console.log(["output", t]);
+              }
+          })
+              .then(function (CCP4Mod) {
+                  window.CCP4Module = CCP4Mod;
+              })
+              .catch((e) => {
+                  console.log("CCP4 problem :(");
+                  console.log(e);
+              });
+      }
+  </script>
+
+    <script module src="baby-gru/wasm/web_example.js"></script>
   </head>
   <body>
     <div id="root"></div>
